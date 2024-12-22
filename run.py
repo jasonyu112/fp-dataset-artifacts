@@ -1,11 +1,13 @@
 import datasets
+from torch.utils.data import DataLoader, WeightedRandomSampler
 from transformers import AutoTokenizer, AutoModelForSequenceClassification, \
     AutoModelForQuestionAnswering, Trainer, TrainingArguments, HfArgumentParser
 import evaluate
 from helpers import prepare_dataset_nli, prepare_train_dataset_qa, \
-    prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy
+    prepare_validation_dataset_qa, QuestionAnsweringTrainer, compute_accuracy, calculate_weights
 import os
 import json
+import CustomTrainer
 
 NUM_PREPROCESSING_WORKERS = 2
 
@@ -130,7 +132,7 @@ def main():
         )
 
     # Select the training configuration
-    trainer_class = Trainer
+    trainer_class = CustomTrainer.CustomTrainer
     eval_kwargs = {}
     # If you want to use custom metrics, you should define your own "compute_metrics" function.
     # For an example of a valid compute_metrics function, see compute_accuracy in helpers.py.
@@ -156,18 +158,33 @@ def main():
         return compute_metrics(eval_preds)
 
     # Initialize the Trainer object with the specified arguments and the model and dataset we loaded above
+    
+    '''
+    if not training_args.do_eval:
+        #weights = calculate_weights(train_dataset_featurized)
+        weights = [.1 if index ==0 else 0 for index in range(len(train_dataset_featurized))]
+        sampler = WeightedRandomSampler(weights, num_samples=len(train_dataset_featurized), replacement=True)
+        train_dataloader = DataLoader(train_dataset_featurized, sampler=sampler, batch_size=training_args.per_device_train_batch_size)
+    '''
+    
     trainer = trainer_class(
         model=model,
         args=training_args,
         train_dataset=train_dataset_featurized,
         eval_dataset=eval_dataset_featurized,
         tokenizer=tokenizer,
-        compute_metrics=compute_metrics_and_store_predictions
+        compute_metrics=compute_metrics_and_store_predictions,
+
     )
+    '''
+    if not training_args.do_eval:
+        trainer.train_dataloader = lambda: train_dataloader
+    '''
     # Train and/or evaluate
     if training_args.do_train:
         trainer.train()
         trainer.save_model()
+
         # If you want to customize the way the loss is computed, you should subclass Trainer and override the "compute_loss"
         # method (see https://huggingface.co/transformers/_modules/transformers/trainer.html#Trainer.compute_loss).
         #

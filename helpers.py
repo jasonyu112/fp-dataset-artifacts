@@ -8,6 +8,27 @@ from tqdm.auto import tqdm
 
 QA_MAX_ANSWER_LENGTH = 30
 
+def calculate_weights(dataset):
+    # Extract confidence and variability scores from the dataset
+    confidence_scores = np.array([example['confidence'][6] for example in dataset])
+    variability_scores = np.array([example['variability'][6] for example in dataset])
+    
+    # Calculate weights based on variability and confidence
+    # 1. Emphasize higher variability with an exponential function
+    variability_scores[variability_scores<.15]*=.00001
+    
+    # 2. Calculate confidence weight to prioritize scores close to 0.5
+    confidence_weight = 1 - np.abs(confidence_scores - 0.5)  # closer to 0.5 -> higher weight
+    confidence_weight[confidence_scores < 0.3] *= .00001
+    #confidence_weight[confidence_scores > 0.8] *=.0001
+    
+    # Final weight as product of both components
+    weights = variability_scores * confidence_weight
+    
+    # Normalize weights to avoid very large numbers (optional but often useful)
+    weights = weights / weights.sum()
+    
+    return weights
 
 # This function preprocesses an NLI dataset, tokenizing premises and hypotheses.
 def prepare_dataset_nli(examples, tokenizer, max_seq_length=None):
@@ -20,8 +41,12 @@ def prepare_dataset_nli(examples, tokenizer, max_seq_length=None):
         max_length=max_seq_length,
         padding='max_length'
     )
-
     tokenized_examples['label'] = examples['label']
+    if 'index' in examples.keys() and 'confidence' in examples.keys():
+        tokenized_examples['id'] = examples['index']
+        tokenized_examples['confidence'] = examples['confidence']
+        tokenized_examples['variability'] = examples['variability']
+        tokenized_examples['abs_variability'] = examples['abs_variability']
     return tokenized_examples
 
 

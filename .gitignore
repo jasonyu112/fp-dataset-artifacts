@@ -1,2 +1,3 @@
-*.pyc
-output/
+*.jsonl
+*.zip
+*trained_model
